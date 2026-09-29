@@ -24,7 +24,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.8",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "happy-dom": "^20.9.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^6.0.3",
