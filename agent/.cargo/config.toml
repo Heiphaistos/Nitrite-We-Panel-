@@ -1,0 +1,4 @@
+# CRT Visual C++ lie en statique : l exe tourne sur un Windows sans
+# Visual C++ Redistributable (sinon "VCRUNTIME140.dll introuvable").
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

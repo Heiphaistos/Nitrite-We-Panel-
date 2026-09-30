@@ -1,5 +1,9 @@
 # Journal des versions — NiTriTe Agent
 
+## 1.2.0
+
+- Runtime Visual C++ lié en statique : l’exe démarre sur un Windows neuf sans Visual C++ Redistributable (plus d’erreur « VCRUNTIME140.dll introuvable »).
+
 ## 1.1.0
 
 - Cookie de session `HttpOnly; SameSite=Strict` : les autres onglets, les favoris et F5 fonctionnent sans jeton dans l'URL.
