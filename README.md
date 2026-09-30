@@ -8,10 +8,10 @@
 
 ## Utilisation
 
-1. Télécharger `NiTriTe-Agent.exe` depuis la page **Releases** du dépôt (le fichier `SHA256SUMS.txt` permet de vérifier son intégrité).
+1. Télécharger `NiTriTe-Agent-X.Y.Z.exe` depuis la page **Releases** du dépôt (le fichier `SHA256SUMS.txt` permet de vérifier son intégrité).
 2. Le lancer : Windows demande les droits administrateur, comme NiTriTe.
 3. Le navigateur s'ouvre sur le panneau. Rien d'autre à installer.
-4. Pour arrêter : menu **Agent** (en bas à droite) › *Arrêter l'agent*, ou simplement fermer l'onglet — l'agent s'arrête seul 15 minutes après la fermeture du dernier onglet.
+4. Pour arrêter : menu **Agent** (en bas à droite) › *Arrêter l'agent*, ou simplement fermer l'onglet — l'agent s'arrête seul 20 secondes après la fermeture du dernier onglet (un F5 ne le coupe pas). Pour le garder en arrière-plan et le lancer à l'ouverture de session : menu **Agent** › *Démarrer avec Windows* (tâche planifiée « NiTriTe Agent », privilèges élevés ; garder l'exe au même endroit).
 
 Relancer l'agent alors qu'il tourne déjà rouvre simplement l'onglet. Les autres onglets (lien ouvert dans un nouvel onglet, favori, F5) restent connectés grâce au cookie de session.
 
@@ -24,7 +24,7 @@ Le menu **Agent** indique l'état de la connexion, les versions de l'agent et de
 | `--app` | ouvrir le panneau dans une fenêtre d'application Edge (sans onglets ni barre d'adresse) |
 | `--no-update-check` | ne pas vérifier les nouvelles versions sur GitHub |
 | `--stay` | ne jamais s'arrêter tout seul |
-| `--idle-minutes N` | arrêt après N minutes sans onglet ouvert |
+| `--idle-minutes N` | arrêt après N minutes sans onglet ouvert (défaut : 20 secondes) |
 | `--lan` | accès depuis un autre PC du réseau local (voir Sécurité) |
 
 ## Sécurité
@@ -77,7 +77,7 @@ Tests :
 
 1. Mettre à jour `version` dans `agent/server/Cargo.toml` et `CHANGELOG.md`.
 2. `git tag vX.Y.Z && git push --tags`.
-3. Le workflow **Release** compile, lance les tests et le test de fumée sur Windows, puis crée la release avec `NiTriTe-Agent.exe` et `SHA256SUMS.txt`. Les agents déjà installés signalent la nouvelle version dans leur menu.
+3. Le workflow **Release** compile, lance les tests et le test de fumée sur Windows, puis crée la release avec `NiTriTe-Agent-X.Y.Z.exe` et `SHA256SUMS.txt`. Les agents déjà installés signalent la nouvelle version dans leur menu.
 
 Dependabot tient à jour le sous-module `upstream/` (NiTriTe), les dépendances Rust/JS et les actions ; le CI refuse toute dépendance désalignée avec NiTriTe.
 

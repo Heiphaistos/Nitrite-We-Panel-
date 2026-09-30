@@ -61,10 +61,16 @@ describe("menu Agent", () => {
     expect(formatUptime(2 * 3600 + 5 * 60)).toBe("2 h 5 min");
   });
 
+  it("explique quand l'agent s'arrête", async () => {
+    const { idleText } = await import("../shims/agent-menu");
+    expect(idleText({ autostart: false, idleSeconds: 20 })).toContain("20 s après la fermeture du dernier onglet");
+    expect(idleText({ autostart: true, idleSeconds: 0 })).toContain("démarre avec Windows");
+  });
+
   it("affiche la pastille et les infos de l'agent, dont la mise à jour", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       version: "1.1.0", nitriteVersion: "8.221.0", port: 7878, lan: false, clients: 1,
-      idleMinutes: 15, uptimeSeconds: 120, update: { version: "1.2.0", url: "https://example.test/r" }, logPath: "C:\\x\\agent.log",
+      idleSeconds: 20, autostart: false, uptimeSeconds: 120, update: { version: "1.2.0", url: "https://example.test/r" }, logPath: "C:\\x\\agent.log",
     }), { status: 200 }));
     const { mountAgentMenu } = await import("../shims/agent-menu");
     mountAgentMenu();

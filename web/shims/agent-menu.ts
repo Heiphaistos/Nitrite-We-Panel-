@@ -14,7 +14,8 @@ export interface AgentInfo {
   port: number;
   lan: boolean;
   clients: number;
-  idleMinutes: number;
+  idleSeconds: number;
+  autostart: boolean;
   uptimeSeconds: number;
   update: { version: string; url: string } | null;
   logPath: string | null;
@@ -80,13 +81,43 @@ function row(label: string, value: string): HTMLDivElement {
 }
 
 async function stopAgent(): Promise<void> {
-  if (!window.confirm("Arrêter NiTriTe Agent ?\n\nLe panneau ne répondra plus jusqu'au prochain lancement de NiTriTe-Agent.exe.")) return;
+  if (!window.confirm("Arrêter NiTriTe Agent ?\n\nLe panneau ne répondra plus jusqu'au prochain lancement de l'agent.")) return;
   try { await agentFetch("/host/shutdown"); } catch { /* il s'arrete deja */ }
   closeMenu();
   document.body.replaceChildren(el("div",
     "position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;"
     + "background:var(--bg-primary,#09090b);color:var(--text-primary,#fafafa);font:15px system-ui,sans-serif;text-align:center;padding:24px",
-    "NiTriTe Agent est arrêté. Vous pouvez fermer cet onglet — relancez NiTriTe-Agent.exe pour rouvrir le panneau."));
+    "NiTriTe Agent est arrêté. Vous pouvez fermer cet onglet — relancez NiTriTe-Agent pour rouvrir le panneau."));
+}
+
+export function idleText(i: Pick<AgentInfo, "autostart" | "idleSeconds">): string {
+  if (i.autostart) return "Reste actif en arrière-plan et démarre avec Windows.";
+  if (i.idleSeconds > 0) return `Se ferme ${i.idleSeconds} s après la fermeture du dernier onglet.`;
+  return "Reste actif jusqu'à l'arrêt manuel.";
+}
+
+/** Case « Démarrer avec Windows » : cochée, l'agent reste en arrière-plan. */
+function autostartToggle(i: AgentInfo): HTMLDivElement {
+  const box = el("div", "margin-top:10px;padding-top:8px;border-top:1px solid var(--border,#2e2e33)");
+  const label = el("label", "display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-primary,#fafafa)");
+  const input = el("input", "accent-color:var(--accent-primary,#f97316);cursor:pointer");
+  input.type = "checkbox";
+  input.checked = i.autostart;
+  label.append(input, document.createTextNode("Démarrer avec Windows"));
+  const hint = el("div", "margin-top:4px;line-height:1.4", idleText(i));
+  input.addEventListener("change", async () => {
+    input.disabled = true;
+    try {
+      const r = await agentFetch<Pick<AgentInfo, "autostart" | "idleSeconds">>("/host/autostart", { enabled: input.checked });
+      Object.assign(i, r);
+    } catch {
+      input.checked = i.autostart;
+    }
+    hint.textContent = idleText(i);
+    input.disabled = false;
+  });
+  box.append(label, hint);
+  return box;
 }
 
 async function openMenu(): Promise<void> {
@@ -109,9 +140,7 @@ async function openMenu(): Promise<void> {
       row("Onglets connectés", String(info.clients)),
       row("Actif depuis", formatUptime(info.uptimeSeconds)),
     );
-    if (info.idleMinutes > 0) {
-      menu.append(el("div", "margin-top:8px;line-height:1.4", `S'arrête seul ${info.idleMinutes} min après la fermeture du dernier onglet.`));
-    }
+    menu.append(autostartToggle(info));
     if (info.update) {
       const a = el("a", "display:block;margin-top:10px;padding:7px 10px;border-radius:6px;text-decoration:none;font-weight:600;"
         + "background:var(--accent-muted,rgba(249,115,22,.12));color:var(--accent-primary,#f97316)",

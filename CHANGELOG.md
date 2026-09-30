@@ -1,5 +1,11 @@
 # Journal des versions — NiTriTe Agent
 
+## 1.5.0
+
+- Fermer le panneau ferme l’agent : arrêt 20 s après la fermeture du dernier onglet (au lieu de 15 min). Un F5 ne le coupe pas ; au lancement, 2 min de marge pour un navigateur lent.
+- Menu Agent › « Démarrer avec Windows » : l’agent reste en arrière-plan et se lance à l’ouverture de session (tâche planifiée à privilèges élevés — une clé `Run` serait ignorée par Windows pour un programme administrateur). Décoché, la tâche est supprimée.
+- Le fichier publié porte sa version : `NiTriTe-Agent-1.5.0.exe`.
+
 ## 1.4.0
 
 - NiTriTe 8.222.0 : démarrage 8 fois plus rapide (tableau de bord en ~8 s au lieu de plus d’une minute). Partages réseau 134 s → 0,7 s, pare-feu ~20 s → 0,2 s, historique système 9,5 s → 0,3 s ; 8 s d’attente maximum par module au chargement.

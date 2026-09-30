@@ -1,6 +1,6 @@
 # Publication d'une version : poussez un tag vX.Y.Z (egal a la version de
 # agent/server/Cargo.toml). Le workflow compile, teste le vrai .exe sur
-# Windows, puis cree la release GitHub avec NiTriTe-Agent.exe et son SHA-256.
+# Windows, puis cree la release GitHub avec NiTriTe-Agent-X.Y.Z.exe et son SHA-256.
 name: Release NiTriTe Agent
 
 on:
@@ -48,8 +48,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
-          Copy-Item agent/target/release/nitrite-agent.exe dist-release/NiTriTe-Agent.exe
-          $hash = (Get-FileHash dist-release/NiTriTe-Agent.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  NiTriTe-Agent.exe" | Set-Content -NoNewline dist-release/SHA256SUMS.txt
-          $notes = "NiTriTe Agent $env:GITHUB_REF_NAME`n`nTelechargez NiTriTe-Agent.exe et lancez-le : le panneau s'ouvre dans le navigateur.`n`nSHA-256 : $hash"
-          gh release create $env:GITHUB_REF_NAME dist-release/NiTriTe-Agent.exe dist-release/SHA256SUMS.txt --title "NiTriTe Agent $env:GITHUB_REF_NAME" --notes $notes
+          # Version dans le nom : visible sur le site et dans Telechargements.
+          $exe = "NiTriTe-Agent-$($env:GITHUB_REF_NAME.TrimStart('v')).exe"
+          Copy-Item agent/target/release/nitrite-agent.exe "dist-release/$exe"
+          $hash = (Get-FileHash "dist-release/$exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $exe" | Set-Content -NoNewline dist-release/SHA256SUMS.txt
+          $notes = "NiTriTe Agent $env:GITHUB_REF_NAME`n`nTelechargez $exe et lancez-le : le panneau s'ouvre dans le navigateur. Il se ferme quand vous fermez le panneau (option « Demarrer avec Windows » dans le menu Agent).`n`nSHA-256 : $hash"
+          gh release create $env:GITHUB_REF_NAME "dist-release/$exe" dist-release/SHA256SUMS.txt --title "NiTriTe Agent $env:GITHUB_REF_NAME" --notes $notes

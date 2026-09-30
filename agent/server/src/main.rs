@@ -14,6 +14,7 @@
 #![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
 
 mod agentlog;
+mod autostart;
 mod browser;
 mod host;
 mod security;
@@ -22,7 +23,7 @@ mod update;
 mod web;
 
 use std::net::{SocketAddr, TcpListener};
-use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -37,6 +38,9 @@ use tower_http::compression::CompressionLayer;
 use serde_json::{json, Value};
 
 pub const DEFAULT_PORT: u16 = 7878;
+/// Arret par defaut apres la fermeture du dernier onglet : assez pour qu'un
+/// F5 ou un changement de page ne coupe pas l'agent.
+pub const DEFAULT_IDLE: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -59,7 +63,7 @@ impl Default for Options {
             open_browser: true,
             app_window: false,
             check_update: true,
-            idle_exit: Duration::from_secs(15 * 60),
+            idle_exit: DEFAULT_IDLE,
         }
     }
 }
@@ -96,7 +100,8 @@ const HELP: &str = "nitrite-agent [--port N] [--no-browser] [--stay | --idle-min
                     (sans onglets ni barre d'adresse)
   --no-update-check ne pas verifier les nouvelles versions sur GitHub
   --stay            ne jamais s'arreter tout seul
-  --idle-minutes N  arret apres N minutes sans navigateur connecte (defaut 15)
+  --idle-minutes N  arret apres N minutes sans navigateur connecte (defaut :
+                    20 secondes ; jamais si le lancement avec Windows est actif)
   --lan             ecouter sur le reseau local (acces depuis un autre PC,
                     jeton toujours exige). Les boites de confirmation
                     s'affichent sur CE poste.";
@@ -110,7 +115,9 @@ pub struct AppCtx {
     /// Politique CSP calculee au demarrage (empreinte du script d'amorce).
     pub csp: String,
     pub update: RwLock<Option<update::UpdateInfo>>,
-    pub idle_minutes: u64,
+    /// Delai d'arret sans onglet, en secondes (0 = jamais). Modifiable a
+    /// chaud par l'option « Demarrer avec Windows ».
+    pub idle_secs: AtomicU64,
     pub started: i64,
 }
 
@@ -182,10 +189,12 @@ fn serve_forever() {
             port,
             lan: opts.lan,
             clients: AtomicUsize::new(0),
-            last_activity: AtomicI64::new(now_secs()),
+            // +100 s : un navigateur lent a demarrer (vieux PC) a le temps de
+            // se connecter avant que le delai de 20 s ne s'applique.
+            last_activity: AtomicI64::new(now_secs() + 100),
             csp: security::content_security_policy(&web::index_script_hashes()),
             update: RwLock::new(None),
-            idle_minutes: opts.idle_exit.as_secs() / 60,
+            idle_secs: AtomicU64::new(if autostart::enabled() { 0 } else { opts.idle_exit.as_secs() }),
             started: now_secs(),
         });
         let sess = session::Session { port, token: ctx.token.clone(), pid: std::process::id() };
@@ -214,9 +223,7 @@ fn serve_forever() {
             });
         }
 
-        if !opts.idle_exit.is_zero() {
-            tokio::spawn(idle_watchdog(ctx.clone(), opts.idle_exit));
-        }
+        tokio::spawn(idle_watchdog(ctx.clone()));
 
         let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>());
         let shutdown = async {
@@ -228,14 +235,15 @@ fn serve_forever() {
     });
 }
 
-/// Arret quand plus aucun onglet n'est connecte depuis `idle` : fermer le
-/// navigateur suffit a liberer le PC, sans interface pour « quitter ».
-async fn idle_watchdog(ctx: Arc<AppCtx>, idle: Duration) {
+/// Arret quand plus aucun onglet n'est connecte depuis `idle_secs` : fermer
+/// le panneau ferme l'agent, rien ne reste en arriere-plan.
+async fn idle_watchdog(ctx: Arc<AppCtx>) {
     loop {
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let idle = ctx.idle_secs.load(Ordering::Relaxed) as i64;
         let quiet = now_secs() - ctx.last_activity.load(Ordering::Relaxed);
-        if ctx.clients.load(Ordering::Relaxed) == 0 && quiet >= idle.as_secs() as i64 {
-            agentlog::line(&format!("Aucun navigateur connecte depuis {} min : arret.", idle.as_secs() / 60));
+        if idle > 0 && ctx.clients.load(Ordering::Relaxed) == 0 && quiet >= idle {
+            agentlog::line(&format!("Aucun onglet ouvert depuis {idle} s : arret."));
             session::clear();
             std::process::exit(0);
         }
@@ -250,6 +258,7 @@ pub fn router(ctx: Arc<AppCtx>) -> Router {
         .route("/invoke/{cmd}", post(invoke))
         .route("/events", get(events))
         .route("/host/shutdown", post(shutdown))
+        .route("/host/autostart", post(set_autostart))
         .merge(host::routes())
         .layer(axum::middleware::from_fn_with_state(ctx.clone(), security::require_token));
 
@@ -289,7 +298,8 @@ async fn agent_info(State(ctx): State<Arc<AppCtx>>) -> Json<Value> {
         "port": ctx.port,
         "lan": ctx.lan,
         "clients": ctx.clients.load(Ordering::Relaxed),
-        "idleMinutes": ctx.idle_minutes,
+        "idleSeconds": ctx.idle_secs.load(Ordering::Relaxed),
+        "autostart": autostart::enabled(),
         "uptimeSeconds": now_secs() - ctx.started,
         "update": *ctx.update.read().unwrap(),
         "logPath": agentlog::path().map(|p| p.to_string_lossy().into_owned()),
@@ -353,6 +363,24 @@ async fn event_loop(mut socket: WebSocket, ctx: Arc<AppCtx>) {
     ctx.touch();
 }
 
+#[derive(serde::Deserialize)]
+struct AutostartReq {
+    enabled: bool,
+}
+
+/// « Demarrer avec Windows » : active, l'agent reste en arriere-plan ;
+/// desactive, il reprend l'arret a la fermeture du dernier onglet.
+async fn set_autostart(State(ctx): State<Arc<AppCtx>>, Json(req): Json<AutostartReq>) -> Response {
+    if let Err(e) = autostart::set(req.enabled) {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!(format!("Lancement automatique : {e}")))).into_response();
+    }
+    let idle = if req.enabled { 0 } else { OPTIONS.get().map_or(DEFAULT_IDLE, |o| o.idle_exit).as_secs() };
+    ctx.idle_secs.store(idle, Ordering::Relaxed);
+    ctx.touch();
+    agentlog::line(if req.enabled { "Lancement avec Windows active" } else { "Lancement avec Windows desactive" });
+    Json(json!({ "autostart": req.enabled, "idleSeconds": idle })).into_response()
+}
+
 async fn shutdown() -> StatusCode {
     agentlog::line("Arret demande depuis le panneau");
     tokio::spawn(async {
@@ -381,6 +409,8 @@ mod tests {
         let o = parse_args(&s(&["--idle-minutes", "3", "--lan"])).unwrap();
         assert_eq!(o.idle_exit, Duration::from_secs(180));
         assert!(o.lan);
+        // Sans option : fermer le panneau ferme l'agent (20 s de marge).
+        assert_eq!(parse_args(&[]).unwrap().idle_exit, DEFAULT_IDLE);
     }
 
     #[test]
@@ -408,7 +438,7 @@ mod tests {
             last_activity: AtomicI64::new(now_secs()),
             csp: security::content_security_policy(&["sha256-TEST=".into()]),
             update: RwLock::new(None),
-            idle_minutes: 15,
+            idle_secs: AtomicU64::new(20),
             started: now_secs(),
         }))
     }
@@ -471,7 +501,7 @@ mod tests {
         let bytes = http_body_util::BodyExt::collect(r.into_body()).await.unwrap().to_bytes();
         let v: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(v["version"], env!("CARGO_PKG_VERSION"));
-        assert_eq!(v["idleMinutes"], 15);
+        assert_eq!(v["idleSeconds"], 20);
         assert!(v["update"].is_null());
     }
 
