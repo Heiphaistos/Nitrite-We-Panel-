@@ -47,7 +47,11 @@ pub fn inline_script_hashes(html: &str) -> Vec<String> {
         let body_start = &after[tag_end + 1..];
         let Some(close) = body_start.find("</script>") else { break };
         if !tag.contains(" src=") && !tag.contains(" src ") {
-            let digest = Sha256::digest(body_start[..close].as_bytes());
+            // Le navigateur hache le texte apres analyse HTML, qui a deja
+            // converti CRLF/CR en LF : un index.html extrait en CRLF sous
+            // Windows donnait une autre empreinte et le script etait bloque.
+            let body = body_start[..close].replace("\r\n", "\n").replace('\r', "\n");
+            let digest = Sha256::digest(body.as_bytes());
             out.push(format!("sha256-{}", base64::engine::general_purpose::STANDARD.encode(digest)));
         }
         rest = &body_start[close + "</script>".len()..];
@@ -65,6 +69,11 @@ pub fn index_script_hashes() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hash_ignores_crlf_like_the_browser() {
+        assert_eq!(inline_script_hashes("<script>a\r\nb</script>"), inline_script_hashes("<script>a\nb</script>"));
+    }
 
     #[test]
     fn hashes_only_inline_scripts() {

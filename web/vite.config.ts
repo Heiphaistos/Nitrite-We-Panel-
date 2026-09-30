@@ -21,7 +21,8 @@ const pkg = JSON.parse(readFileSync(resolve(UPSTREAM, "package.json"), "utf-8"))
 function agentBootstrap(): Plugin {
   return {
     name: "nitrite-agent-bootstrap",
-    transformIndexHtml(html) {
+    // `pre` : Vite traite ensuite le src du logo comme un asset du build.
+    transformIndexHtml: { order: "pre", handler(html) {
       const boot = `<script>
 (function(){
   window.__TAURI_INTERNALS__ = { webpanel: true };
@@ -35,8 +36,10 @@ function agentBootstrap(): Plugin {
 </script>`;
       return html
         .replace(/<title>[^<]*<\/title>/, "<title>NiTriTe — Panneau web</title>")
-        .replace("<head>", "<head>\n    " + boot);
-    },
+        .replace("<head>", "<head>\n    " + boot)
+        // Ecran de demarrage : le vrai logo au lieu du carre gris vide.
+        .replace('<div id="native-boot-logo"></div>', '<img id="native-boot-logo" src="/src/assets/nitrite-logo.jpg" alt="" />');
+    } },
   };
 }
 

@@ -1,5 +1,10 @@
 # Journal des versions — NiTriTe Agent
 
+## 1.3.0
+
+- Le panneau restait bloqué sur « Chargement… » avec un carré gris : le navigateur refusait le script qui masque l’écran de démarrage (empreinte CSP calculée sur un fichier en fins de ligne Windows). Corrigé.
+- Écran de démarrage : le logo NiTriTe remplace le carré gris.
+
 ## 1.2.0
 
 - Runtime Visual C++ lié en statique : l’exe démarre sur un Windows neuf sans Visual C++ Redistributable (plus d’erreur « VCRUNTIME140.dll introuvable »).
