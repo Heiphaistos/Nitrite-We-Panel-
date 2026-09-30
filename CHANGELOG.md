@@ -1,5 +1,10 @@
 # Journal des versions — NiTriTe Agent
 
+## 1.4.0
+
+- NiTriTe 8.222.0 : démarrage 8 fois plus rapide (tableau de bord en ~8 s au lieu de plus d’une minute). Partages réseau 134 s → 0,7 s, pare-feu ~20 s → 0,2 s, historique système 9,5 s → 0,3 s ; 8 s d’attente maximum par module au chargement.
+- Barre d’état : pourcentages arrondis.
+
 ## 1.3.0
 
 - Le panneau restait bloqué sur « Chargement… » avec un carré gris : le navigateur refusait le script qui masque l’écran de démarrage (empreinte CSP calculée sur un fichier en fins de ligne Windows). Corrigé.
